@@ -4,15 +4,8 @@ data class Chat(
     val id: UInt,
     val owner: UInt,
     val recipient: UInt,
-    var lastUnreadMsg: Int = UNEXISTING_MESSAGE
-) {
-    fun lastMessage(): String {
-        return if (lastUnreadMsg == UNEXISTING_MESSAGE)
-            "Нет сообщений"
-        else
-            ""
-    }
-}
+    var unreadCount: UInt = 0U
+)
 
 data class Message(
     val id: UInt,

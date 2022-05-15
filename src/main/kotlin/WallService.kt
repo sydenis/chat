@@ -10,6 +10,23 @@ object WallService {
     private var messageIdGen: AtomicInteger = AtomicInteger()
 
     fun chatAdd(owner: UInt, recipient: UInt): UInt {
+        if (owner == recipient)
+           throw RuntimeException("Собеседники чата не могут быть одним человеком")
+
+        if (
+            chats.filter {
+                it.owner == owner &&
+                        it.recipient == recipient
+            }.isNotEmpty()
+            ||
+            chats.filter {
+                it.owner == recipient &&
+                        it.recipient == owner
+            }.isNotEmpty()
+        )
+            throw RuntimeException("Чат уже существует")
+
+
         val id = chatIdGen.getAndIncrement().toUInt()
         chats.add(Chat(id, owner, recipient))
         return id
@@ -24,33 +41,57 @@ object WallService {
         return chats.remove(chatById(id))
     }
 
-    fun chatsByOwner(owner: UInt): List<Chat> {
-        return chats.filter { it.owner == owner }
+    fun chatsByUser(user: UInt): List<Chat> {
+        return chats.filter {
+            user in setOf(it.owner, it.recipient)
+        }
     }
 
-    fun chatUnreadCount(owner: UInt): Int {
-        return chatsByOwner(owner).filter {
-            it.lastUnreadMsg != UNEXISTING_MESSAGE
+    fun chatUnreadCount(user: UInt): Int {
+        return chatsByUser(user).filter {
+            it.unreadCount != 0U
         }.count()
     }
 
     fun chatGetUnreadMessages(chatId: UInt, recipient: UInt, offset: Int, count: Int): List<Message>{
+        val chat = chatById(chatId) ?: throw RuntimeException("Чат не существует")
+
         var newMessages =  messages
             .filter {
                 it.chatId == chatId &&
-                it.fromUser != recipient
+                it.fromUser != recipient &&
+                !it.isRead
             }
             .sortedBy { it.id }
-            .subList(offset, offset + count)
+
+        val actualCnt = if (count == 0)
+            newMessages.count() - offset
+        else
+            count
+
+        newMessages = newMessages.subList(offset, offset + actualCnt)
 
         newMessages.forEach { it.isRead = true }
+
+        val unreadChatCnt = chat.unreadCount
+        val unreadMsgCnt = newMessages.count()
+
+        if (unreadMsgCnt.toUInt() <= unreadChatCnt)
+            chat.unreadCount -= unreadMsgCnt.toUInt()
+        else
+            chat.unreadCount = 0U
 
         return newMessages
     }
 
     fun messageAdd(chatId: UInt, fromUser: UInt, text: String): UInt {
+        val chat = chatById(chatId) ?: throw RuntimeException("Чат не существует")
+
         val id = messageIdGen.getAndIncrement().toUInt()
         messages.add(Message(id, chatId, fromUser, text))
+
+        chat.unreadCount++
+
         return id
     }
 
@@ -69,6 +110,14 @@ object WallService {
             chatDel(chatId)
 
         return result
+    }
+
+    fun clear() {
+        chats = mutableListOf<Chat>()
+        chatIdGen.set(0)
+
+        messages = mutableListOf<Message>()
+        messageIdGen.set(0)
     }
 
 }
